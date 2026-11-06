@@ -318,6 +318,14 @@ impl PluginApi {
         })?;
         pin.verify().map(Path::to_path_buf).map_err(|e| HostError::Denied(format!("{cap}: {e}")))
     }
+
+    /// The repository at `root`, under the project's trust decision: its config can name programs
+    /// (filters, fsmonitor) that reading status would otherwise run in Restricted Mode.
+    fn repo(&self, root: &Path) -> Result<Option<ide_vcs::Repo>, HostError> {
+        let Some(repo) = ide_vcs::Repo::discover(root).map_err(failed)? else { return Ok(None) };
+        repo.set_execution_allowed(self.shared.workspace().is_some_and(|w| w.trusted(root)));
+        Ok(Some(repo))
+    }
 }
 
 fn failed(e: impl std::fmt::Display) -> HostError {
@@ -422,7 +430,7 @@ impl HostApi for PluginApi {
     }
 
     fn vcs_status(&self, root: &Path) -> Result<Option<RepositoryStatus>, HostError> {
-        let Some(repo) = ide_vcs::Repo::discover(root).map_err(failed)? else { return Ok(None) };
+        let Some(repo) = self.repo(root)? else { return Ok(None) };
         let info = repo.branch_info().map_err(failed)?;
         let changed = repo.status().map_err(failed)?.len();
         Ok(Some(RepositoryStatus {
@@ -438,7 +446,7 @@ impl HostApi for PluginApi {
     }
 
     fn vcs_remotes(&self, root: &Path) -> Result<Vec<(String, String)>, HostError> {
-        let Some(repo) = ide_vcs::Repo::discover(root).map_err(failed)? else { return Ok(Vec::new()) };
+        let Some(repo) = self.repo(root)? else { return Ok(Vec::new()) };
         let remotes = repo.remotes().map_err(failed)?;
         Ok(remotes.into_iter().map(|r| (r.name, without_credentials(&r.url))).collect())
     }
@@ -448,7 +456,7 @@ impl HostApi for PluginApi {
         if !workspace.is_some_and(|w| w.trusted(root)) {
             return Err(HostError::Failed("the project is in Restricted Mode: git does not run there".into()));
         }
-        let Some(repo) = ide_vcs::Repo::discover(root).map_err(failed)? else {
+        let Some(repo) = self.repo(root)? else {
             return Err(HostError::NotFound("the project is not in a git repository".into()));
         };
         match repo.fetch(cancel, &|_| {}) {
@@ -843,6 +851,32 @@ mod tests {
         let api = api(&root, Arc::default());
         assert_eq!(api.find_files(&root, "**/*.java", 8).unwrap(), [to_ipc(&file)]);
         assert_eq!(api.vcs_status(&root).unwrap().unwrap().root, to_ipc(&root));
+    }
+
+    /// A repository whose own config runs a program when status reads a modified file.
+    #[cfg(unix)]
+    #[test]
+    fn status_runs_repository_programs_only_in_trusted_projects() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        let git = |args: &[&str]| {
+            assert!(std::process::Command::new("git").arg("-C").arg(&root).args(args).status().unwrap().success());
+        };
+        git(&["init", "-q"]);
+        std::fs::write(root.join("a.txt"), "one\n").unwrap();
+        git(&["add", "a.txt"]);
+        let marker = root.join("ran");
+        git(&["config", "filter.x.clean", &format!("touch '{}'; cat", marker.display())]);
+        std::fs::write(root.join(".gitattributes"), "* filter=x\n").unwrap();
+        std::fs::write(root.join("a.txt"), "two\n").unwrap();
+
+        let api = api(&root, Arc::default());
+        assert_eq!(api.vcs_status(&root).unwrap().unwrap().changed_files, 2);
+        assert!(!marker.exists(), "an untrusted project's filter ran");
+
+        *api.shared.workspace.write() = Some(Arc::new(Indexed(root.clone(), Vec::new())));
+        api.vcs_status(&root).unwrap();
+        assert!(marker.exists(), "a trusted project's filter should run, or this test proves nothing");
     }
 
     /// A project index that lists `files` (root-relative), whatever is on disk.
