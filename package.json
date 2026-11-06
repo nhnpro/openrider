@@ -1,7 +1,7 @@
 {
   "name": "openidea",
   "private": true,
-  "description": "An open-source IDE inspired by IntelliJ IDEA",
+  "description": "An open-source IDE for Unity and C#, built on OpenIDEA",
   "version": "0.1.37",
   "license": "Apache-2.0",
   "type": "module",

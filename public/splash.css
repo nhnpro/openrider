@@ -45,8 +45,12 @@ body,
 }
 /* 15px Inter: 2048 units per em, the line box from ascender to descender. */
 .splash-wordmark {
-  width: 73.2px;
-  height: 18.15px;
+  font:
+    500 18px/1 -apple-system,
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  letter-spacing: -0.01em;
 }
 .splash-bar {
   width: var(--splash-bar-width, 120px);

@@ -49,7 +49,7 @@ function ProjectOpening({ path }: { path: string }) {
       <div className={styles.openingBody} role="status" aria-label={label}>
         <div className={styles.openingBrand} aria-hidden="true">
           <img className={styles.openingLogo} src={projectMark} alt="" draggable={false} />
-          <span>OpenIDEA</span>
+          <span>OpenRider</span>
         </div>
         <ProgressBar className={styles.openingProgress} aria-label={label} />
         <div className={styles.openingTitle}>{label}</div>
