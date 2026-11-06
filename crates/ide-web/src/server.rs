@@ -33,9 +33,15 @@ const SEGMENT: &AsciiSet = &CONTROLS
     .add(b'}');
 
 struct Shared {
-    token: String,
     /// URL key (`/<token>/<key>/…`) → served directory.
-    roots: RwLock<HashMap<String, PathBuf>>,
+    roots: RwLock<HashMap<String, Root>>,
+}
+
+/// A served directory. Each has its own token, so a page served from one directory
+/// cannot read files of another that it can only guess the name of.
+struct Root {
+    token: String,
+    dir: PathBuf,
 }
 
 /// The built-in web server; started on the first [`WebServer::url_for`].
@@ -52,23 +58,22 @@ impl Default for WebServer {
 
 impl WebServer {
     pub fn new() -> Self {
-        Self {
-            shared: Arc::new(Shared { token: uuid::Uuid::new_v4().simple().to_string(), roots: RwLock::default() }),
-            port: tokio::sync::OnceCell::new(),
-        }
+        Self { shared: Arc::new(Shared { roots: RwLock::default() }), port: tokio::sync::OnceCell::new() }
     }
 
     /// The URL serving `file`: under `root` (the project) when it contains the
-    /// file, else under the file's directory. Starts the server if needed.
+    /// file outside hidden folders (which are not served), else under the file's
+    /// directory. Starts the server if needed.
     pub async fn url_for(&self, root: Option<&Path>, file: &Path) -> IdeResult<String> {
-        let base = match root {
-            Some(r) if file.starts_with(r) && file != r => r,
-            _ => file.parent().ok_or_else(|| IdeError::invalid(format!("no directory: {}", file.display())))?,
+        let parent = || file.parent().ok_or_else(|| IdeError::invalid(format!("no directory: {}", file.display())));
+        let base = match root.and_then(|r| file.strip_prefix(r).ok().map(|rel| (r, rel))) {
+            Some((r, rel)) if !rel.as_os_str().is_empty() && !rel.parent().is_some_and(hidden) => r,
+            _ => parent()?,
         };
         let rel = file.strip_prefix(base).map_err(|e| IdeError::internal(e.to_string()))?;
         let port = self.port().await?;
-        let key = self.register(base);
-        let mut url = format!("http://127.0.0.1:{port}/{}/{}", self.shared.token, enc(&key));
+        let (token, key) = self.register(base);
+        let mut url = format!("http://127.0.0.1:{port}/{token}/{}", enc(&key));
         for c in rel.components() {
             url.push('/');
             url.push_str(&enc(&c.as_os_str().to_string_lossy()));
@@ -76,11 +81,11 @@ impl WebServer {
         Ok(url)
     }
 
-    /// The key `dir` is served under: its name, made unique.
-    fn register(&self, dir: &Path) -> String {
+    /// The token and key `dir` is served under: a new token, and its name made unique.
+    fn register(&self, dir: &Path) -> (String, String) {
         let mut roots = self.shared.roots.write();
-        if let Some((k, _)) = roots.iter().find(|(_, d)| d.as_path() == dir) {
-            return k.clone();
+        if let Some((k, r)) = roots.iter().find(|(_, r)| r.dir == dir) {
+            return (r.token.clone(), k.clone());
         }
         let name: String = dir
             .file_name()
@@ -94,8 +99,9 @@ impl WebServer {
             .map(|i| if i == 1 { name.clone() } else { format!("{name}-{i}") })
             .find(|k| !roots.contains_key(k))
             .expect("unbounded");
-        roots.insert(key.clone(), dir.to_path_buf());
-        key
+        let token = uuid::Uuid::new_v4().simple().to_string();
+        roots.insert(key.clone(), Root { token: token.clone(), dir: dir.to_path_buf() });
+        (token, key)
     }
 
     async fn port(&self) -> IdeResult<u16> {
@@ -132,6 +138,11 @@ impl WebServer {
             .copied()
             .map_err(|e| IdeError::unavailable(format!("cannot start the built-in web server: {e}")))
     }
+}
+
+/// Whether `rel` passes through a hidden (dot) folder.
+fn hidden(rel: &Path) -> bool {
+    rel.components().any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
 }
 
 fn enc(s: &str) -> String {
@@ -234,11 +245,12 @@ async fn resolve(shared: &Shared, target: &str) -> Response {
     let path = target.split(['?', '#']).next().unwrap_or("");
     let Some(rest) = path.strip_prefix('/') else { return NOT_FOUND };
     let mut segments = rest.split('/');
-    if segments.next() != Some(shared.token.as_str()) {
-        return NOT_FOUND;
-    }
+    let token = segments.next();
     let Some(key) = segments.next().and_then(dec) else { return NOT_FOUND };
-    let Some(root) = shared.roots.read().get(&key).cloned() else { return NOT_FOUND };
+    let Some(root) = shared.roots.read().get(&key).filter(|r| Some(r.token.as_str()) == token).map(|r| r.dir.clone())
+    else {
+        return NOT_FOUND;
+    };
     let Ok(real_root) = tokio::fs::canonicalize(&root).await else { return NOT_FOUND };
     let mut file = root;
     // `/<token>/<key>` names a directory too: it redirects like any other.
@@ -248,7 +260,8 @@ async fn resolve(shared: &Shared, target: &str) -> Response {
             continue;
         }
         match dec(seg) {
-            Some(s) if s != "." && s != ".." && !s.contains(['/', '\\', ':', '\0']) => file.push(s),
+            // Dotfiles (`.env`, `.git/`, `.npmrc`) hold credentials a page has no use for.
+            Some(s) if !s.starts_with('.') && !s.contains(['/', '\\', ':', '\0']) => file.push(s),
             _ => return NOT_FOUND,
         }
     }
@@ -356,9 +369,44 @@ mod tests {
         assert!(get(&format!("{base}/%2e%2e/secret.txt"), None).await.starts_with("HTTP/1.1 404"));
         assert!(get(&format!("{base}/web/..%2f..%2fsecret.txt"), None).await.starts_with("HTTP/1.1 404"));
         // Wrong token, foreign Host (DNS rebinding).
-        let other = url.replacen(&server.shared.token, "0123", 1);
+        let token = url.trim_start_matches("http://").split('/').nth(1).unwrap();
+        let other = url.replacen(token, "0123", 1);
         assert!(get(&other, None).await.starts_with("HTTP/1.1 404"));
         assert!(get(&url, Some("evil.example:80")).await.starts_with("HTTP/1.1 403"));
+    }
+
+    #[tokio::test]
+    async fn pages_cannot_read_dotfiles_or_other_roots() {
+        let dir = tempfile::tempdir().unwrap();
+        let (a, b) = (dir.path().join("a"), dir.path().join("b"));
+        std::fs::create_dir_all(a.join(".git")).unwrap();
+        std::fs::create_dir_all(a.join("pub")).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        std::fs::write(a.join("index.html"), "<h1>a</h1>").unwrap();
+        std::fs::write(a.join(".env"), "TOKEN=x").unwrap();
+        std::fs::write(a.join(".git/config"), "[core]").unwrap();
+        std::fs::write(a.join("pub/.npmrc"), "//registry/:_authToken=x").unwrap();
+        std::fs::write(b.join("secret.txt"), "b").unwrap();
+
+        let server = WebServer::new();
+        let ua = server.url_for(None, &a.join("index.html")).await.unwrap();
+        let ub = server.url_for(None, &b.join("secret.txt")).await.unwrap();
+        let base = ua.trim_end_matches("index.html");
+        for hidden in [".env", ".git/config", "pub/.npmrc", "%2eenv"] {
+            let page = get(&format!("{base}{hidden}"), None).await;
+            assert!(page.starts_with("HTTP/1.1 404"), "{hidden}: {page}");
+        }
+        assert!(get(&ub, None).await.ends_with("b"));
+        // A page inside a hidden folder is served from its own directory.
+        std::fs::create_dir_all(a.join(".vitepress/dist")).unwrap();
+        std::fs::write(a.join(".vitepress/dist/index.html"), "<h1>docs</h1>").unwrap();
+        let docs = server.url_for(Some(&a), &a.join(".vitepress/dist/index.html")).await.unwrap();
+        assert!(docs.ends_with("/dist/index.html") && get(&docs, None).await.ends_with("<h1>docs</h1>"), "{docs}");
+        // `a`'s token with `b`'s key: the page of `a` knows only its own token.
+        let token_a = ua.trim_start_matches("http://").split('/').nth(1).unwrap();
+        let token_b = ub.trim_start_matches("http://").split('/').nth(1).unwrap();
+        assert_ne!(token_a, token_b);
+        assert!(get(&ub.replacen(token_b, token_a, 1), None).await.starts_with("HTTP/1.1 404"));
     }
 
     #[cfg(unix)]
