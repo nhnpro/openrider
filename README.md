@@ -1,74 +1,64 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="src-tauri/icons/source/openidea-wordmark-dark.svg">
-    <img src="src-tauri/icons/source/openidea-wordmark.svg" alt="OpenIDEA" height="56">
-  </picture>
-</p>
+# OpenRider
 
-<p align="center">
-  The IDE you know, rebuilt in Rust.
-</p>
+An open-source desktop IDE for **Unity and C#**, with a Rust core and a native
+(Tauri) shell. OpenRider is a fork of [OpenIDEA](https://github.com/l0ng-ai/openidea)
+and keeps its editor, code insight, debugger, Git, terminal and plugin system,
+then focuses on game development with Unity and .NET.
 
-<p align="center">
-  <a href="https://github.com/l0ng-ai/openidea/releases/latest"><b>Download</b></a>
-  &nbsp;·&nbsp;
-  <a href="#benchmark">Benchmark</a>
-  &nbsp;·&nbsp;
-  <a href="#plugins">Plugins</a>
-  &nbsp;·&nbsp;
-  <a href="#community">Community</a>
-</p>
+> **Status: early.** No releases yet. Build it from source (below).
 
-https://github.com/user-attachments/assets/234dd54c-1255-4b3a-b35c-533d78d737c0
+## What works today
 
-OpenIDEA brings the IntelliJ IDEA way of working — its keymap, its tool windows,
-its search-everything habits — to a native app with a Rust core.
+- **C#**: completion, navigation and refactors through `csharp-ls`. Run configurations from
+  `.sln`/`.slnx`/`.csproj` and `launchSettings.json`, `dotnet build` and `dotnet test`
+  runs, and launch debugging through `netcoredbg`.
+- **Unity projects**:
+  - detects the project and its editor version;
+  - a Unity view of the project tree that hides `Library/`, `Temp/` and `.meta` files;
+  - moving or renaming an asset keeps its `.meta` file and GUID;
+  - duplicating an asset gives the copy a fresh GUID and rewrites its references;
+  - new `.meta` files are staged in Git with their assets.
+- Everything inherited from OpenIDEA: many languages through LSP, debugging through DAP,
+  Git, terminal, database and HTTP clients, and sandboxed WebAssembly plugins.
 
-Editor, code insight, debugger, Git, terminal, database and HTTP clients,
-for 60+ languages. Builds for macOS, Windows and Linux.
+## Roadmap
 
-## Benchmark
+The plan is in [`docs/proposals/rust-csharp-unity.md`](docs/proposals/rust-csharp-unity.md).
+The main items:
 
-Opening [freqtrade](https://github.com/freqtrade/freqtrade) (Python, ~770 files)
-with warm caches, median of 5 runs:
+1. **Unity external script editor**: a `com.open.rider` Unity package, so OpenRider can be
+   picked in _Preferences › External Tools_ and generates the `.sln`/`.csproj` files.
+2. **Asset-aware navigation**: index scenes, prefabs and assets, then find the GameObjects and
+   prefabs that use a script, method or serialized field.
+3. **Unity inspections**: event functions such as `Update` are no longer reported as unused,
+   plus Unity analyzers and message completion.
+4. **Unity debugger**: attach to the Unity Editor and players (Mono soft debugger).
+5. **Editor link**: Play, Pause and Refresh from the IDE, the Unity console, and the Unity Test Runner.
+6. A better C# experience: Roslyn language server, a solution view, NuGet and a test tree.
 
-|                             | OpenIDEA          | IntelliJ IDEA 2026.2.3 |
-| --------------------------- | ----------------- | ---------------------- |
-| Window with the project     | **0.9 s**         | 3.1 s                  |
-| Ready (CPU settled)         | **1.1 s**         | 13.2 s                 |
-| Memory (USS, all processes) | **169 MB**        | 2011 MB                |
-| CPU time until ready        | **2.4 s**         | 47.9 s                 |
-| Idle CPU                    | **4 %** of a core | 7 % of a core          |
-| Quit                        | **0.3 s**         | 5.9 s                  |
+## Build from source
 
-A release build of OpenIDEA from `main` and IDEA with default settings and plugins, on
-Windows 11, 32-core AMD, 62 GB RAM.
-IDEA analyses Python more deeply, so "ready" doesn't mean the same work on
-both sides. Both are measured from the outside, the same way: see
-[`perf/compare`](perf/compare) to run it on your machine and projects.
+Requirements:
 
-## Plugins
+- [Rust](https://rustup.rs) (stable)
+- Node.js 22 LTS (22.18 or newer)
+- pnpm
+- the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS
 
-Plugins add actions, completion, quick fixes, tool windows, custom editors,
-themes, file icons and languages. They run as sandboxed WebAssembly components;
-themes, icon themes and languages need no code at all.
+```sh
+pnpm install
+pnpm tauri dev      # debug build with hot reload
+pnpm tauri build    # release bundle in target/release/bundle/
+```
 
-Install them from Settings › Plugins, or start your own with
-`openidea-plugin new` — see [Writing OpenIDEA plugins](plugins/README.md) and
-the [official plugins](plugins/official). The plugin API is still a preview.
-
-## Community
-
-- [Discord](https://discord.gg/2Zy4yn7gP) — questions, feedback and release news.
-- WeChat group — scan to join:
-
-  <img src="docs/assets/wechat-group.png" alt="WeChat group QR code" width="200">
+The first build compiles about a thousand crates and can take a while; later builds are
+incremental. Contributor notes are in [`CLAUDE.md`](CLAUDE.md) and
+[`CONTRIBUTING.md`](CONTRIBUTING.md). Plugin docs: [`plugins/README.md`](plugins/README.md).
 
 ## License
 
-[Apache 2.0](LICENSE). Bundled third-party assets are listed in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
+[Apache 2.0](LICENSE). OpenRider is based on OpenIDEA; see [`NOTICE`](NOTICE) for
+attribution and [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) for bundled assets.
 
-Database tool window notes, including Oracle Instant Client setup, are in
-[`docs/databases.md`](docs/databases.md).
-
-<sub>Not affiliated with JetBrains. IntelliJ IDEA is a trademark of JetBrains s.r.o.</sub>
+<sub>Not affiliated with, endorsed by or sponsored by JetBrains s.r.o. Rider, IntelliJ and
+IntelliJ IDEA are trademarks of JetBrains s.r.o.</sub>
