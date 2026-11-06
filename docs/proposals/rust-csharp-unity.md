@@ -169,7 +169,7 @@ Editor link (U4–U5).
 
 ### U1: OpenIDEA as Unity's external script editor
 
-- Ship a **Unity package** `com.open.rider` (new top-level `unity/` folder, installable by git URL or OpenUPM):
+- Ship a **Unity package** `dev.prefabric.unity` (new top-level `unity/` folder, installable by git URL or OpenUPM):
   - implements `IExternalCodeEditor`, so OpenIDEA appears in _Preferences › External Tools_ and opens files at a line;
   - generates `.sln`/`.csproj` itself, replacing the "pick VS Code or Rider" step in `ProjectView.tsx:785`.
 - The IDE offers to install the package when it opens a Unity project that doesn't have it (edits `Packages/manifest.json`, with confirmation).
@@ -214,7 +214,7 @@ Editor link (U4–U5).
 
 ### U5: Editor connection
 
-- `com.open.rider` opens a local socket (token-authenticated: see the security review) and offers:
+- `dev.prefabric.unity` opens a local socket (token-authenticated: see the security review) and offers:
   - Play / Pause / Step from the IDE toolbar, with play-mode state in the status bar;
   - Refresh assets (`AssetDatabase.Refresh`) on save, or on demand;
   - **Unity Console** tool window with streamed logs, clickable stack traces, and filters for log, warning and error;
