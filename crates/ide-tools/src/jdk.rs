@@ -191,6 +191,7 @@ pub fn adoptium_pick(json: &str, platform: Platform) -> IdeResult<Option<(Downlo
                 size: a.binary.package.size,
                 sha256,
                 checksum_url: None,
+                sha512: None,
             },
             a.version.major,
         )

@@ -54,6 +54,7 @@ pub fn fetch(
         let dl = sources::Download {
             version: version.to_owned(),
             checksum_url: None,
+            sha512: None,
             name,
             url,
             size: None,

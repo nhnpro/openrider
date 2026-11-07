@@ -28,6 +28,10 @@ pub enum ReleaseSource {
     OpenVsx { namespace: &'static str, extension: &'static str },
     /// Latest release of a Maven Central artifact (the `.jar` itself).
     MavenCentral { group: &'static str, artifact: &'static str },
+    /// A `.nupkg` from nuget.org, verified against its published SHA-512. `{rid}`
+    /// in the id stands for the platform's runtime identifier (`osx-arm64`, …),
+    /// for packages published per platform; `version` pins one.
+    NuGet { package: &'static str, version: Option<&'static str> },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -78,6 +82,7 @@ impl Method {
             Method::Release { source: ReleaseSource::EclipseJdtls, .. } => "Eclipse download",
             Method::Release { source: ReleaseSource::OpenVsx { .. }, .. } => "Open VSX",
             Method::Release { source: ReleaseSource::MavenCentral { .. }, .. } => "Maven Central",
+            Method::Release { source: ReleaseSource::NuGet { .. }, .. } => "NuGet",
             Method::Release { .. } => "GitHub release",
         }
     }

@@ -647,10 +647,11 @@ fn dotnet_tool_install_into_tool_path() {
         &env.sys,
         "dotnet",
         r#"case "$2" in
-install) /bin/mkdir -p "$5"; printf '#!/bin/sh\necho "$DOTNET_ROOT"\n' > "$5/csharp-ls"; /bin/chmod +x "$5/csharp-ls" ;;
+install) pwd > "$5/../../install-cwd"; /bin/mkdir -p "$5"; printf '#!/bin/sh\necho "$DOTNET_ROOT"\n' > "$5/csharp-ls"; /bin/chmod +x "$5/csharp-ls" ;;
 list) printf 'Package Id      Version      Commands\n----\ncsharp-ls       0.15.0       csharp-ls\n' ;;
 esac
 [ "$1" = --list-runtimes ] && echo 'Microsoft.NETCore.App 9.0.1 [/opt/dotnet/shared/Microsoft.NETCore.App]'
+[ "$1" = --list-sdks ] && echo '10.0.100 [/opt/dotnet/sdk]'
 exit 0"#,
     );
     let info = env.tools().install("csharp-ls", &langs(), &CancellationToken::new(), &|_| {}).unwrap();
@@ -660,6 +661,9 @@ exit 0"#,
     assert_eq!(info.path.as_deref(), Some(wrapper.as_path()));
     let out = std::process::Command::new(&wrapper).output().unwrap();
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "/opt/dotnet");
+    // Not in the IDE's working directory, whose nuget.config could name another package feed.
+    let cwd = fs::read_to_string(env.root.join("install-cwd")).unwrap();
+    assert_eq!(fs::canonicalize(cwd.trim()).unwrap(), fs::canonicalize(env.root.join(".dotnet-cwd")).unwrap());
 }
 
 #[test]
@@ -795,4 +799,126 @@ fn python_probes_run_in_an_empty_private_directory() {
     let out = String::from_utf8(out.stdout).unwrap();
     let dir = env.root.join(".python-cwd");
     assert_eq!(out.trim(), dir.canonicalize().unwrap().to_string_lossy());
+}
+
+/// A NuGet package is checked against its published SHA-512: a match passes,
+/// anything else is refused before it is unpacked.
+#[cfg(unix)]
+#[test]
+fn nuget_downloads_are_checked_against_their_sha512() {
+    let env = Env::new();
+    let fixtures = env.root.parent().unwrap().join("fixtures");
+    fs::create_dir_all(&fixtures).unwrap();
+    let package = fixtures.join("pkg.nupkg");
+    fs::write(&package, b"a nupkg").unwrap();
+    env.script(
+        &env.sys,
+        "curl",
+        &format!(
+            r#"out=""
+while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -A|-H|--retry|--connect-timeout) shift 2;; -*) shift;; *) shift;; esac; done
+/bin/cp '{}' "$out""#,
+            package.display()
+        ),
+    );
+    let http = Http::new(&env.sys.clone().into_os_string()).unwrap();
+    let staging = env.root.join(".staging");
+    fs::create_dir_all(&staging).unwrap();
+    let mut dl = sources::Download {
+        version: "1.0.0".into(),
+        name: "pkg.1.0.0.nupkg".into(),
+        url: "https://api.nuget.org/v3-flatcontainer/pkg/1.0.0/pkg.1.0.0.nupkg".into(),
+        size: None,
+        sha256: None,
+        checksum_url: None,
+        sha512: Some(sources::sha512_file(&package).unwrap()),
+    };
+    let lines = Mutex::new(Vec::new());
+    let emit = |e: InstallEvent| {
+        if let InstallEvent::Line { text } = e {
+            lines.lock().push(text);
+        }
+    };
+    fetch_verified(&http, &dl, &staging, &CancellationToken::new(), &emit).unwrap();
+    assert!(lines.lock().iter().any(|l| l == "Checksum verified (SHA-512)"), "{:?}", lines.lock());
+    assert!(!lines.lock().iter().any(|l| l.contains("skipping verification")), "{:?}", lines.lock());
+
+    dl.sha512 = Some("0".repeat(128));
+    let err = fetch_verified(&http, &dl, &staging, &CancellationToken::new(), &|_| {}).unwrap_err();
+    assert!(err.message.contains("checksum mismatch"), "{}", err.message);
+}
+
+/// Without a .NET 10 SDK on the machine, installing a .NET tool first unpacks a
+/// private SDK (checked against Microsoft's SHA-512) and installs with it.
+#[cfg(unix)]
+#[test]
+fn dotnet_tools_install_a_private_sdk_when_the_system_one_is_too_old() {
+    let env = Env::new();
+    env.script(
+        &env.sys,
+        "dotnet",
+        r#"[ "$1" = --list-sdks ] && echo '8.0.416 [/usr/local/share/dotnet/sdk]'
+exit 0"#,
+    );
+    // The SDK archive: a `dotnet` that installs tools and reports its own root.
+    let fixtures = env.root.parent().unwrap().join("fixtures");
+    let sdk = fixtures.join("sdk");
+    env.script(
+        &sdk,
+        "dotnet",
+        r#"here="${0%/*}"
+case "$1 $2" in
+  "tool install") /bin/mkdir -p "$5"; printf '#!/bin/sh\necho "$DOTNET_ROOT"\n' > "$5/fsautocomplete"; /bin/chmod +x "$5/fsautocomplete" ;;
+esac
+[ "$1" = --list-sdks ] && echo "10.0.403 [$here/sdk]"
+[ "$1" = --list-runtimes ] && echo "Microsoft.NETCore.App 10.0.14 [$here/shared/Microsoft.NETCore.App]"
+exit 0"#,
+    );
+    let archive = fixtures.join("dotnet-sdk-10.0.403.tar.gz");
+    assert!(
+        Command::new("tar").arg("-czf").arg(&archive).arg("-C").arg(&sdk).arg("dotnet").status().unwrap().success()
+    );
+    let hash = sources::sha512_file(&archive).unwrap();
+    let rid = sources::nuget_rid(Platform::current());
+    let name = format!("dotnet-sdk-{rid}.tar.gz");
+    let json = fixtures.join("releases.json");
+    fs::write(
+        &json,
+        format!(
+            r#"{{"latest-sdk":"10.0.403","releases":[{{"sdk":{{"version":"10.0.403","files":[{{"name":"{name}","rid":"{rid}","url":"https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.403/dotnet-sdk-10.0.403-{rid}.tar.gz","hash":"{hash}"}}]}}}}]}}"#
+        ),
+    )
+    .unwrap();
+    env.script(
+        &env.sys,
+        "curl",
+        &format!(
+            r#"out=""; url=""
+while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -A|-H|--retry|--connect-timeout) shift 2;; -*) shift;; *) url="$1"; shift;; esac; done
+case "$url" in
+  *release-metadata*) /bin/cat '{json}';;
+  *) /bin/cp '{archive}' "$out";;
+esac"#,
+            json = json.display(),
+            archive = archive.display()
+        ),
+    );
+    let lines = Mutex::new(Vec::new());
+    let emit = |e: InstallEvent| {
+        if let InstallEvent::Line { text } = e {
+            lines.lock().push(text);
+        }
+    };
+    let info = env.tools().install("fsautocomplete", &langs(), &CancellationToken::new(), &emit).unwrap();
+    assert_eq!(info.status, ToolStatus::Installed);
+    let lines = lines.into_inner();
+    assert!(lines.iter().any(|l| l == "Checksum verified (SHA-512)"), "{lines:?}");
+    let private = env.root.join("dotnet-sdk");
+    assert!(private.join("dotnet").is_file());
+    // The tool runs on the private SDK.
+    let out = Command::new(env.root.join("fsautocomplete/bin/fsautocomplete")).output().unwrap();
+    assert_eq!(
+        fs::canonicalize(String::from_utf8_lossy(&out.stdout).trim()).unwrap(),
+        fs::canonicalize(&private).unwrap()
+    );
 }

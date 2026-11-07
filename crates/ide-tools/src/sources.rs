@@ -1,5 +1,5 @@
 //! Release metadata: GitHub releases, HashiCorp releases, Eclipse JDT LS
-//! milestones. Parsing is pure so it is testable without network.
+//! milestones, NuGet packages. Parsing is pure so it is testable without network.
 
 use crate::platform::{AssetRule, Platform, select_asset};
 use ide_core::error::ErrorKind;
@@ -17,6 +17,8 @@ pub struct Download {
     pub sha256: Option<String>,
     /// URL of a checksum file to fetch when `sha256` is not inline.
     pub checksum_url: Option<String>,
+    /// Lower-case hex SHA-512 (NuGet publishes only these). Required where set.
+    pub sha512: Option<String>,
 }
 
 fn proto(msg: impl Into<String>) -> IdeError {
@@ -69,6 +71,7 @@ pub fn github_pick(json: &str, rules: &[AssetRule], platform: Platform) -> IdeRe
             size: a.size,
             sha256,
             checksum_url,
+            sha512: None,
         });
     }
     let links = extract_links(rel.body.as_deref().unwrap_or(""));
@@ -76,7 +79,15 @@ pub fn github_pick(json: &str, rules: &[AssetRule], platform: Platform) -> IdeRe
     if let Some(name) = select_asset(&link_names, rules, platform) {
         let url = links.iter().find(|u| file_name(u) == name).expect("selected from list").clone();
         let checksum_url = links.iter().find(|u| *u == &format!("{url}.sha256")).cloned();
-        return Ok(Download { version, name: name.to_string(), url, size: None, sha256: None, checksum_url });
+        return Ok(Download {
+            version,
+            name: name.to_string(),
+            url,
+            size: None,
+            sha256: None,
+            checksum_url,
+            sha512: None,
+        });
     }
     Err(IdeError::unavailable(format!("release {} has no build for this platform", rel.tag_name)))
 }
@@ -136,6 +147,7 @@ pub fn hashicorp_pick(json: &str, rules: &[AssetRule], platform: Platform) -> Id
         size: None,
         sha256: None,
         checksum_url: rel.url_shasums,
+        sha512: None,
     })
 }
 
@@ -168,6 +180,7 @@ pub fn jdtls_download(version: &str, latest_txt: &str) -> IdeResult<Download> {
         version: version.to_string(),
         name: name.to_string(),
         checksum_url: Some(format!("{url}.sha256")),
+        sha512: None,
         url,
         size: None,
         sha256: None,
@@ -223,6 +236,7 @@ pub fn openvsx_pick(json: &str, rules: &[AssetRule], platform: Platform) -> IdeR
         size: None,
         sha256: None,
         checksum_url: ext.files.sha256,
+        sha512: None,
     })
 }
 
@@ -256,6 +270,190 @@ pub fn maven_pick(group: &str, artifact: &str, metadata: &str) -> IdeResult<Down
         size: None,
         sha256: None,
         checksum_url: None,
+        sha512: None,
+    })
+}
+
+const NUGET: &str = "https://api.nuget.org/v3";
+
+/// The NuGet runtime identifier of a platform, for packages published per platform.
+pub fn nuget_rid(platform: Platform) -> &'static str {
+    use crate::platform::{Arch, Os};
+    match (platform.os, platform.arch) {
+        (Os::Mac, Arch::Arm64) => "osx-arm64",
+        (Os::Mac, Arch::X64) => "osx-x64",
+        (Os::Linux, Arch::Arm64) => "linux-arm64",
+        (Os::Linux, Arch::X64) => "linux-x64",
+        (Os::Windows, Arch::Arm64) => "win-arm64",
+        (Os::Windows, Arch::X64) => "win-x64",
+    }
+}
+
+/// A package id with `{rid}` replaced by the platform's runtime identifier,
+/// lower-cased as NuGet's URLs want it.
+pub fn nuget_package_id(template: &str, platform: Platform) -> String {
+    template.replace("{rid}", nuget_rid(platform)).to_ascii_lowercase()
+}
+
+pub fn nuget_versions_url(id: &str) -> String {
+    format!("{NUGET}-flatcontainer/{id}/index.json")
+}
+
+#[derive(Deserialize)]
+struct NuGetVersions {
+    versions: Vec<String>,
+}
+
+/// The version to install: the pinned one when it is published, otherwise the
+/// newest stable version, or the newest prerelease when there is no stable one.
+pub fn nuget_pick_version(json: &str, pinned: Option<&str>) -> IdeResult<String> {
+    let index: NuGetVersions =
+        serde_json::from_str(json).map_err(|e| proto(format!("unexpected NuGet response: {e}")))?;
+    let lower = |v: &str| v.to_ascii_lowercase();
+    if let Some(pinned) = pinned {
+        return index
+            .versions
+            .iter()
+            .find(|v| lower(v) == lower(pinned))
+            .cloned()
+            .ok_or_else(|| IdeError::unavailable(format!("version {pinned} is not published on NuGet")));
+    }
+    // The index lists versions in ascending order.
+    let stable = index.versions.iter().rev().find(|v| !v.contains('-'));
+    stable.or(index.versions.last()).cloned().ok_or_else(|| IdeError::unavailable("no version published on NuGet"))
+}
+
+/// Registration leaf of a version; its `catalogEntry` holds the package hash.
+/// The `gz-semver2` hive lists every package and is served gzip-compressed.
+pub fn nuget_registration_url(id: &str, version: &str) -> String {
+    format!("{NUGET}/registration5-gz-semver2/{id}/{}.json", version.to_ascii_lowercase())
+}
+
+#[derive(Deserialize)]
+struct NuGetLeaf {
+    #[serde(rename = "catalogEntry")]
+    catalog_entry: String,
+}
+
+pub fn nuget_catalog_url(registration_json: &str) -> IdeResult<String> {
+    let leaf: NuGetLeaf =
+        serde_json::from_str(registration_json).map_err(|e| proto(format!("unexpected NuGet registration: {e}")))?;
+    if !leaf.catalog_entry.starts_with(&format!("{NUGET}/catalog0/")) {
+        return Err(proto(format!("unexpected NuGet catalog URL {}", leaf.catalog_entry)));
+    }
+    Ok(leaf.catalog_entry)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NuGetCatalogEntry {
+    #[serde(default)]
+    package_hash: Option<String>,
+    #[serde(default)]
+    package_hash_algorithm: Option<String>,
+    #[serde(default)]
+    package_size: Option<u64>,
+}
+
+/// The `.nupkg` of a version, with the SHA-512 from its catalog entry. A
+/// package without a SHA-512 is refused: nothing else vouches for it.
+pub fn nuget_download(id: &str, version: &str, catalog_json: &str) -> IdeResult<Download> {
+    use base64::Engine;
+    let entry: NuGetCatalogEntry =
+        serde_json::from_str(catalog_json).map_err(|e| proto(format!("unexpected NuGet catalog entry: {e}")))?;
+    let sha512 = match (entry.package_hash, entry.package_hash_algorithm.as_deref()) {
+        (Some(hash), Some(alg)) if alg.eq_ignore_ascii_case("SHA512") => base64::engine::general_purpose::STANDARD
+            .decode(hash.trim())
+            .ok()
+            .filter(|b| b.len() == 64)
+            .map(hex::encode),
+        _ => None,
+    }
+    .ok_or_else(|| proto(format!("NuGet publishes no SHA-512 for {id} {version}")))?;
+    let version = version.to_ascii_lowercase();
+    let name = format!("{id}.{version}.nupkg");
+    Ok(Download {
+        url: format!("{NUGET}-flatcontainer/{id}/{version}/{name}"),
+        version,
+        name,
+        size: entry.package_size,
+        sha256: None,
+        checksum_url: None,
+        sha512: Some(sha512),
+    })
+}
+
+/// Microsoft's release metadata of a .NET channel (`10.0`).
+pub fn dotnet_releases_url(channel: &str) -> String {
+    format!("https://builds.dotnet.microsoft.com/dotnet/release-metadata/{channel}/releases.json")
+}
+
+#[derive(Deserialize)]
+struct DotnetChannel {
+    #[serde(rename = "latest-sdk")]
+    latest_sdk: String,
+    releases: Vec<DotnetRelease>,
+}
+
+#[derive(Deserialize)]
+struct DotnetRelease {
+    #[serde(default)]
+    sdk: Option<DotnetSdk>,
+    #[serde(default)]
+    sdks: Vec<DotnetSdk>,
+}
+
+#[derive(Deserialize)]
+struct DotnetSdk {
+    version: String,
+    #[serde(default)]
+    files: Vec<DotnetFile>,
+}
+
+#[derive(Deserialize)]
+struct DotnetFile {
+    name: String,
+    #[serde(default)]
+    rid: String,
+    url: String,
+    #[serde(default)]
+    hash: String,
+}
+
+/// The archive of the channel's latest SDK for the platform (`.tar.gz`, or
+/// `.zip` on Windows), with its SHA-512. Installers (`.pkg`, `.exe`) are skipped:
+/// the SDK is unpacked privately, not installed system-wide.
+pub fn dotnet_sdk_pick(json: &str, platform: Platform) -> IdeResult<Download> {
+    let channel: DotnetChannel =
+        serde_json::from_str(json).map_err(|e| proto(format!("unexpected .NET release metadata: {e}")))?;
+    let rid = nuget_rid(platform);
+    let suffix = if platform.os == crate::platform::Os::Windows { ".zip" } else { ".tar.gz" };
+    let sdk = channel
+        .releases
+        .iter()
+        .flat_map(|r| r.sdk.iter().chain(&r.sdks))
+        .find(|s| s.version == channel.latest_sdk)
+        .ok_or_else(|| proto(format!("no files listed for .NET SDK {}", channel.latest_sdk)))?;
+    let file = sdk
+        .files
+        .iter()
+        .find(|f| f.rid == rid && f.name.ends_with(suffix))
+        .ok_or_else(|| IdeError::unavailable(format!(".NET SDK {} has no {rid} archive", sdk.version)))?;
+    let hash = file.hash.to_ascii_lowercase();
+    if hash.len() != 128 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(proto(format!("no SHA-512 published for {}", file.name)));
+    }
+    if !file.url.starts_with("https://") {
+        return Err(proto(format!("unexpected .NET download URL {}", file.url)));
+    }
+    Ok(Download {
+        version: sdk.version.clone(),
+        name: file_name(&file.url).to_string(),
+        url: file.url.clone(),
+        size: None,
+        sha256: None,
+        checksum_url: None,
+        sha512: Some(hash),
     })
 }
 
@@ -276,6 +474,14 @@ pub fn parse_checksum(text: &str, file_name: &str) -> Option<String> {
         }
     }
     None
+}
+
+pub fn sha512_file(path: &std::path::Path) -> IdeResult<String> {
+    use sha2::Digest;
+    let mut f = std::fs::File::open(path)?;
+    let mut hasher = sha2::Sha512::new();
+    std::io::copy(&mut f, &mut hasher)?;
+    Ok(hex::encode(hasher.finalize()))
 }
 
 pub fn sha256_file(path: &std::path::Path) -> IdeResult<String> {
@@ -454,6 +660,61 @@ mod tests {
         assert_eq!(
             sha256_file(tmp.path()).unwrap(),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn nuget_ids_versions_and_hashes() {
+        assert_eq!(nuget_package_id("Roslyn-Language-Server.{rid}", MAC_ARM), "roslyn-language-server.osx-arm64");
+        assert_eq!(nuget_package_id("roslyn-language-server.{rid}", LINUX), "roslyn-language-server.linux-x64");
+        let versions = r#"{"versions":["5.11.0-1.2","5.11.0","5.13.0-1.26514.10"]}"#;
+        assert_eq!(nuget_pick_version(versions, None).unwrap(), "5.11.0");
+        assert_eq!(nuget_pick_version(versions, Some("5.13.0-1.26514.10")).unwrap(), "5.13.0-1.26514.10");
+        assert!(nuget_pick_version(versions, Some("9.9.9")).is_err());
+        assert_eq!(nuget_pick_version(r#"{"versions":["1.0.0-a","1.0.0-b"]}"#, None).unwrap(), "1.0.0-b");
+        assert_eq!(
+            nuget_registration_url("pkg", "5.13.0-RC.1"),
+            "https://api.nuget.org/v3/registration5-gz-semver2/pkg/5.13.0-rc.1.json"
+        );
+
+        let leaf = r#"{"catalogEntry":"https://api.nuget.org/v3/catalog0/data/2026.08.04.21.00.48/pkg.5.11.0.json"}"#;
+        assert!(nuget_catalog_url(leaf).unwrap().ends_with("/pkg.5.11.0.json"));
+        assert!(nuget_catalog_url(r#"{"catalogEntry":"https://evil.example/x.json"}"#).is_err());
+
+        // Real catalog values of roslyn-language-server.osx-arm64 5.11.0.
+        let entry = r#"{"packageHash":"7my7b+bvqFUHhBxWTNkJUM88uv0SvliIPJeAjiKtZq9Vbp1rsSq+FWQQM56DcdpqKsQSL8zWbxZxVbn91K7sjA==","packageHashAlgorithm":"SHA512","packageSize":66160655}"#;
+        let dl = nuget_download("roslyn-language-server.osx-arm64", "5.11.0", entry).unwrap();
+        assert_eq!(
+            dl.url,
+            "https://api.nuget.org/v3-flatcontainer/roslyn-language-server.osx-arm64/5.11.0/roslyn-language-server.osx-arm64.5.11.0.nupkg"
+        );
+        assert_eq!(dl.size, Some(66160655));
+        assert_eq!(dl.sha512.as_deref().map(str::len), Some(128));
+        assert!(dl.sha512.unwrap().starts_with("ee6cbb6f"));
+        // No SHA-512, no download.
+        assert!(nuget_download("pkg", "1.0.0", r#"{"packageSize":1}"#).is_err());
+        assert!(nuget_download("pkg", "1.0.0", r#"{"packageHash":"AAAA","packageHashAlgorithm":"SHA512"}"#).is_err());
+    }
+
+    #[test]
+    fn dotnet_sdk_archive_for_the_platform() {
+        let h = "a".repeat(128);
+        let json = format!(
+            r#"{{"latest-sdk":"10.0.403","releases":[{{"sdk":{{"version":"10.0.403","files":[
+            {{"name":"dotnet-sdk-osx-arm64.pkg","rid":"osx-arm64","url":"https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.403/dotnet-sdk-10.0.403-osx-arm64.pkg","hash":"{h}"}},
+            {{"name":"dotnet-sdk-osx-arm64.tar.gz","rid":"osx-arm64","url":"https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.403/dotnet-sdk-10.0.403-osx-arm64.tar.gz","hash":"{h}"}},
+            {{"name":"dotnet-sdk-linux-x64.tar.gz","rid":"linux-x64","url":"https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.403/dotnet-sdk-10.0.403-linux-x64.tar.gz","hash":"bad"}}
+            ]}},"sdks":[]}}]}}"#
+        );
+        let dl = dotnet_sdk_pick(&json, MAC_ARM).unwrap();
+        assert_eq!(dl.version, "10.0.403");
+        assert_eq!(dl.name, "dotnet-sdk-10.0.403-osx-arm64.tar.gz");
+        assert_eq!(dl.sha512.as_deref(), Some(h.as_str()));
+        // A malformed hash is refused rather than skipped.
+        assert!(dotnet_sdk_pick(&json, LINUX).is_err());
+        assert!(
+            dotnet_sdk_pick(&json, Platform { os: crate::platform::Os::Windows, arch: crate::platform::Arch::X64 })
+                .is_err()
         );
     }
 }

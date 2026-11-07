@@ -354,6 +354,8 @@ impl Http {
         cancel: &CancellationToken,
     ) -> IdeResult<String> {
         let (mut cmd, token) = self.base(url, cancel)?;
+        // Some APIs (NuGet's registration) always answer gzip-compressed.
+        cmd.arg("--compressed");
         if empty_on_404 {
             cmd.args(["--write-out", "\n%{http_code}"]);
         }

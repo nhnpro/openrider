@@ -17,6 +17,7 @@
 
 pub mod archive;
 mod bundled;
+mod dotnet_sdk;
 pub mod formatter;
 pub mod jdk;
 pub mod platform;
@@ -506,6 +507,19 @@ impl Tools {
         cmd
     }
 
+    /// `dotnet` started in an empty private directory: NuGet reads `nuget.config`
+    /// (package sources) and the SDK reads `global.json` from the working directory
+    /// and its parents, and the IDE's own (inherited from wherever it was launched,
+    /// e.g. a project) could send a tool install to a project's package feed.
+    fn dotnet_command(&self, dotnet: impl AsRef<std::ffi::OsStr>) -> Command {
+        let mut cmd = self.command(dotnet);
+        let dir = self.root.join(".dotnet-cwd");
+        if std::fs::create_dir_all(&dir).is_ok() {
+            cmd.current_dir(dir);
+        }
+        cmd
+    }
+
     /// `python` started in an empty private directory: Python puts the working directory
     /// first on `sys.path` for `-c` / `-m`, and the IDE's own (inherited from wherever it
     /// was launched, e.g. a project) could hold modules that shadow the standard library,
@@ -640,9 +654,8 @@ impl Tools {
             Method::Gem { .. } | Method::GemActive { .. } => {
                 need(self.which("gem").is_some(), "Ruby is required (https://www.ruby-lang.org)")
             }
-            Method::DotnetTool { .. } => {
-                need(self.which("dotnet").is_some(), ".NET SDK is required (https://dotnet.microsoft.com/download)")
-            }
+            // Without a suitable SDK the install fetches a private one (`dotnet_sdk`).
+            Method::DotnetTool { .. } => None,
             Method::PipVenv { .. } => need(
                 self.which("uv").is_some() || self.python().is_some(),
                 "Python 3 or uv is required (https://www.python.org)",
@@ -1075,8 +1088,8 @@ impl Tools {
         let _ = std::fs::remove_dir_all(&dir);
         let tool = dir.join("tool");
         std::fs::create_dir_all(&tool)?;
-        let dotnet = self.which("dotnet").expect("checked");
-        let mut c = self.command(&dotnet);
+        let dotnet = self.ensure_dotnet(cancel, emit)?;
+        let mut c = self.dotnet_command(&dotnet);
         c.args(["tool", "install", package, "--tool-path"]).arg(&tool);
         let result = run_streamed(c, cancel, emit).and_then(|_| {
             // The tool's apphost looks for .NET in the default location only; a
@@ -1098,7 +1111,7 @@ impl Tools {
             return Err(e);
         }
         // `Package Id      Version      Commands` table.
-        let mut c = self.command(&dotnet);
+        let mut c = self.dotnet_command(&dotnet);
         c.args(["tool", "list", "--tool-path"]).arg(&tool);
         let version = run_quiet(c, Duration::from_secs(20)).and_then(|(_, out)| {
             out.lines().find_map(|l| {
@@ -1247,6 +1260,14 @@ impl Tools {
             ReleaseSource::MavenCentral { group, artifact } => {
                 let xml = http.get_text(&sources::maven_metadata_url(group, artifact), cancel)?;
                 sources::maven_pick(group, artifact, &xml)
+            }
+            ReleaseSource::NuGet { package, version } => {
+                let id = sources::nuget_package_id(package, self.platform);
+                let versions = http.get_text(&sources::nuget_versions_url(&id), cancel)?;
+                let version = sources::nuget_pick_version(&versions, version)?;
+                let leaf = http.get_text(&sources::nuget_registration_url(&id, &version), cancel)?;
+                let catalog = http.get_text(&sources::nuget_catalog_url(&leaf)?, cancel)?;
+                sources::nuget_download(&id, &version, &catalog)
             }
         }
     }
@@ -1446,7 +1467,18 @@ fn fetch_verified(
             }
             emit(InstallEvent::Line { text: "Checksum verified (SHA-256)".into() });
         }
+        None if dl.sha512.is_some() => {}
         None => emit(InstallEvent::Line { text: "No checksum published; skipping verification".into() }),
+    }
+    if let Some(expected) = &dl.sha512 {
+        let actual = sources::sha512_file(&archive)?;
+        if actual != *expected {
+            return Err(IdeError::new(
+                ErrorKind::Io,
+                format!("checksum mismatch for {}: expected SHA-512 {expected}, got {actual}", dl.name),
+            ));
+        }
+        emit(InstallEvent::Line { text: "Checksum verified (SHA-512)".into() });
     }
     if cancel.is_cancelled() {
         return Err(IdeError::cancelled());
@@ -1455,7 +1487,7 @@ fn fetch_verified(
 }
 
 /// Removes the quarantine flag archives may carry, so macOS runs what was unpacked.
-fn clear_quarantine(dir: &Path) {
+pub(crate) fn clear_quarantine(dir: &Path) {
     #[cfg(target_os = "macos")]
     {
         let _ = Command::new("xattr").args(["-dr", "com.apple.quarantine"]).arg(dir).output();

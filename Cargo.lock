@@ -4729,6 +4729,7 @@ dependencies = [
 name = "ide-tools"
 version = "0.1.37"
 dependencies = [
+ "base64 0.22.1",
  "flate2",
  "hex",
  "ide-core",

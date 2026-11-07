@@ -21,8 +21,8 @@ pub enum ArchiveKind {
 impl ArchiveKind {
     pub fn from_name(name: &str) -> Self {
         let n = name.to_ascii_lowercase();
-        // JetBrains' macOS .sit distributions are zip archives.
-        if n.ends_with(".zip") || n.ends_with(".vsix") || n.ends_with(".sit") {
+        // JetBrains' macOS .sit distributions and NuGet packages are zip archives.
+        if n.ends_with(".zip") || n.ends_with(".vsix") || n.ends_with(".sit") || n.ends_with(".nupkg") {
             Self::Zip
         } else if n.ends_with(".tar.gz") || n.ends_with(".tgz") {
             Self::TarGz
