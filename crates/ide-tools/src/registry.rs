@@ -120,6 +120,8 @@ use Os::{Linux, Mac, Windows};
 use ToolKind::{Debugger, Formatter, LanguageServer, Plugin};
 
 const V: Option<(&str, &[&str])> = None;
+/// The Roslyn language server version installed for C#.
+pub const ROSLYN_VERSION: &str = "5.13.0-1.26514.10";
 const JAVA: &[(&str, &str)] = &[("java", "Java is required (https://adoptium.net)")];
 const NODE: &[(&str, &str)] = &[("node", "Node.js is required (https://nodejs.org)")];
 const ELIXIR: &[(&str, &str)] = &[("elixir", "Elixir is required (https://elixir-lang.org/install.html)")];
@@ -967,6 +969,23 @@ pub static TOOLS: &[ToolSpec] = &[
         fallback: None,
         version: ver("solargraph"),
         homepage: "https://solargraph.org",
+        needs: &[],
+    },
+    ToolSpec {
+        name: "roslyn",
+        display: "Roslyn (C#)",
+        kind: LanguageServer,
+        commands: &["roslyn-language-server"],
+        method: Method::Release {
+            // The C# extension's server, published per platform. Pinned: its protocol
+            // extensions change between releases (`ide-lsp/src/roslyn.rs`).
+            source: ReleaseSource::NuGet { package: "roslyn-language-server.{rid}", version: Some(ROSLYN_VERSION) },
+            assets: &[any_arch(Mac, "*.nupkg"), any_arch(Linux, "*.nupkg"), any_arch(Windows, "*.nupkg")],
+            locate: &["Microsoft.CodeAnalysis.LanguageServer"],
+        },
+        fallback: None,
+        version: V,
+        homepage: "https://github.com/dotnet/roslyn",
         needs: &[],
     },
     ToolSpec {

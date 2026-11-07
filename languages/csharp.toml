@@ -8,7 +8,36 @@ ui-mode = "C#"
 tree-sitter = "csharp"
 
 [[language-servers]]
+# The C# extension's server. Its project loading (solution/open) is in ide-lsp/src/roslyn.rs.
+name = "roslyn"
+command = "roslyn-language-server"
+args = ["--logLevel=Information", "--stdio"]
+root-markers = ["*.sln", "*.slnx", "*.csproj", "global.json", "Directory.Build.props", "ProjectSettings/ProjectVersion.txt"]
+install-hint = "Install Roslyn (C#) in Settings › Languages & Frameworks › Language Servers"
+
+# Answers Roslyn's `workspace/configuration` (sections `csharp|<group>.<option>`, as
+# in VS Code's C# extension). Formatting and code style come from `.editorconfig`.
+[language-servers.settings."csharp|inlay_hints"]
+dotnet_enable_inlay_hints_for_parameters = true
+dotnet_enable_inlay_hints_for_literal_parameters = true
+dotnet_suppress_inlay_hints_for_parameters_that_match_method_intent = true
+dotnet_suppress_inlay_hints_for_parameters_that_match_argument_name = true
+csharp_enable_inlay_hints_for_types = true
+csharp_enable_inlay_hints_for_implicit_variable_types = true
+csharp_enable_inlay_hints_for_lambda_parameter_types = true
+
+[language-servers.settings."csharp|background_analysis"]
+# Compiler errors for the whole solution in Problems; analyzers only for open files.
+dotnet_compiler_diagnostics_scope = "fullSolution"
+dotnet_analyzer_diagnostics_scope = "openFiles"
+
+[language-servers.settings."csharp|completion"]
+dotnet_show_completion_items_from_unimported_namespaces = true
+
+[[language-servers]]
 name = "csharp-ls"
+# Alternative: used only when Roslyn is not installed or turned off.
+fallback = true
 command = "csharp-ls"
 root-markers = ["*.sln", "*.slnx", "*.csproj", "global.json", "Directory.Build.props", "ProjectSettings/ProjectVersion.txt"]
 install-hint = "dotnet tool install --global csharp-ls"

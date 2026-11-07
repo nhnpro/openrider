@@ -1281,6 +1281,11 @@ impl Tools {
         cancel: &CancellationToken,
         emit: Emit,
     ) -> IdeResult<()> {
+        // NuGet packages hold framework-dependent .NET apps: they need a .NET to run on.
+        let dotnet = match source {
+            ReleaseSource::NuGet { .. } => Some(self.ensure_dotnet(cancel, emit)?),
+            _ => None,
+        };
         let http = Http::new(&self.system_path)?;
         emit(InstallEvent::Line { text: "Resolving the latest release…".into() });
         let dl = self.resolve_release(&http, source, assets, cancel)?;
@@ -1290,7 +1295,18 @@ impl Tools {
         std::fs::create_dir_all(&staging)?;
         let result = self.download_and_unpack(spec, &http, &dl, locate, &staging, cancel, emit);
         let _ = std::fs::remove_dir_all(&staging);
-        result
+        let target = result?;
+        // The app host finds .NET only in its default location; name a private or
+        // Homebrew one through DOTNET_ROOT, as for `dotnet tool` installs.
+        if let Some(root) = dotnet.as_deref().and_then(|d| self.dotnet_root(d)) {
+            archive::env_wrapper(
+                &self.root.join(spec.name).join("bin"),
+                spec.commands[0],
+                &target,
+                &[("DOTNET_ROOT", &root)],
+            )?;
+        }
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1303,7 +1319,7 @@ impl Tools {
         staging: &Path,
         cancel: &CancellationToken,
         emit: Emit,
-    ) -> IdeResult<()> {
+    ) -> IdeResult<PathBuf> {
         let archive = fetch_verified(http, dl, staging, cancel, emit)?;
         emit(InstallEvent::Line { text: "Extracting…".into() });
         let pkg = staging.join("pkg");
@@ -1350,7 +1366,8 @@ impl Tools {
         }
         // Downloads made by the IDE itself are not quarantined, but archives may carry the flag.
         clear_quarantine(&final_dir);
-        self.write_manifest(spec.name, &Manifest { version: Some(dl.version.clone()), source: Some(dl.url.clone()) })
+        self.write_manifest(spec.name, &Manifest { version: Some(dl.version.clone()), source: Some(dl.url.clone()) })?;
+        Ok(target)
     }
 
     /// Removes a tool the IDE installed.

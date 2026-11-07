@@ -1254,7 +1254,12 @@ impl LspManager {
         }
         let (method, cap, feature) = goto_method(kind);
         let (snap, targets) = self.doc_targets(doc, feature, |c| c.has(cap)).await?;
-        self.goto_in(&snap, &targets, method, pos, None, None).await
+        let locations = self.goto_in(&snap, &targets, method, pos, None, None).await?;
+        if targets.iter().any(|t| t.server.name == roslyn::SERVER) {
+            let paths: Vec<PathBuf> = locations.iter().map(|l| PathBuf::from(&*l.path)).collect();
+            let _ = tokio::task::spawn_blocking(move || roslyn::protect_metadata_sources(&paths)).await;
+        }
+        Ok(locations)
     }
 
     /// Go to Implementation, with the implementations found first passed to `partial` while

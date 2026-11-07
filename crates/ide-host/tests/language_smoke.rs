@@ -834,6 +834,63 @@ async fn go() {
     smoke("go", GO).await;
 }
 
+const CSHARP: Checks = Checks {
+    fixture: "csharp-app",
+    files: &[],
+    // Roslyn loads the solution (and restores NuGet packages) before answering.
+    warm_up: Duration::from_secs(300),
+    definition: (
+        at("src/Tasks.Cli/Program.cs", "var store = new TaskStore();", "TaskStore"),
+        at("src/Tasks.Core/TaskStore.cs", "public sealed class TaskStore", "TaskStore"),
+    ),
+    references: (
+        at("src/Tasks.Core/TaskStore.cs", "public TaskItem Add(string title", "Add"),
+        &["src/Tasks.Cli/Program.cs", "tests/Tasks.Tests/TaskStoreTests.cs"],
+    ),
+    hover: (at("src/Tasks.Cli/Program.cs", "store.Complete(2);", "Complete"), "bool TaskStore.Complete(int id)"),
+    completion: (typed("src/Tasks.Cli/Program.cs", "store.Complete(2);", "store."), "Pending"),
+    quick_fix: QuickFix {
+        typed: typed("src/Tasks.Cli/Program.cs", "store.Complete(2);", "var sb = new StringBuilder();"),
+        diagnostic: "StringBuilder",
+        title: "using System.Text;",
+        result: "using System.Text;",
+    },
+    intention: (
+        at(
+            "src/Tasks.Core/TaskStore.cs",
+            "var item = new TaskItem(_nextId++, title.Trim(), priority);",
+            "title.Trim()",
+        ),
+        "Introduce",
+    ),
+    format: (typed("src/Tasks.Core/TaskStore.cs", "_items.Add(item);", "        var  x=1;"), "        var x = 1;"),
+    indent: Indent::Spaces(4),
+    rename: (
+        at("src/Tasks.Core/TaskStore.cs", "public bool Complete(int id)", "Complete"),
+        "Finish",
+        &["src/Tasks.Core/TaskStore.cs", "src/Tasks.Cli/Program.cs", "tests/Tasks.Tests/TaskStoreTests.cs"],
+    ),
+    signature: (typed("src/Tasks.Cli/Program.cs", "store.Complete(2);", "store.Add("), "title"),
+    outline: (
+        "src/Tasks.Core/TaskStore.cs",
+        &["TaskStore", "Add(string, Priority) : TaskItem", "Complete(int) : bool"],
+    ),
+    auto_import: AutoImport {
+        typed: typed("src/Tasks.Cli/Program.cs", "store.Complete(2);", "var sb = new StringBuil"),
+        label: "StringBuilder",
+        result: "using System.Text;",
+    },
+    // Roslyn offers "Remove unnecessary usings" but no `source.organizeImports` action.
+    organize_imports: None,
+    file_move: None,
+};
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "language smoke: needs roslyn-language-server"]
+async fn csharp() {
+    smoke("csharp", CSHARP).await;
+}
+
 const JAVA: Checks = Checks {
     fixture: "java-app",
     files: &[],

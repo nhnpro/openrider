@@ -87,6 +87,28 @@ fn notification(target: &Target) -> (&'static str, Value) {
     }
 }
 
+/// Roslyn writes decompiled and source-link sources of referenced assemblies
+/// (Go to Definition on `List<T>`) under `<temp>/MetadataAsSource/`. They are
+/// regenerated on demand, so edits would be lost: make them read-only, which
+/// opens them read-only in the editor.
+pub(crate) fn protect_metadata_sources(paths: &[PathBuf]) {
+    let generated = std::env::temp_dir().join("MetadataAsSource");
+    let generated = dunce::canonicalize(&generated).unwrap_or(generated);
+    for path in paths {
+        let canonical = dunce::canonicalize(path).unwrap_or_else(|_| path.clone());
+        if !canonical.starts_with(&generated) {
+            continue;
+        }
+        if let Ok(meta) = std::fs::metadata(&canonical) {
+            let mut permissions = meta.permissions();
+            if !permissions.readonly() {
+                permissions.set_readonly(true);
+                let _ = std::fs::set_permissions(&canonical, permissions);
+            }
+        }
+    }
+}
+
 impl LspManager {
     /// Opens the root's solution or projects in a just-initialized Roslyn
     /// instance; the server counts as loading until it reports [`PROJECTS_LOADED`].
@@ -166,6 +188,25 @@ mod tests {
             Some(Target::Projects(vec![root.join("src/App/obj/Generated.csproj")]))
         );
         assert_eq!(target(&root.join("docs")), None);
+    }
+
+    #[test]
+    fn only_generated_metadata_sources_become_read_only() {
+        let generated = std::env::temp_dir().join("MetadataAsSource").join(format!("test-{}", std::process::id()));
+        std::fs::create_dir_all(&generated).unwrap();
+        let decompiled = generated.join("List.cs");
+        std::fs::write(&decompiled, "class List {}").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("Program.cs");
+        std::fs::write(&project, "").unwrap();
+        protect_metadata_sources(&[decompiled.clone(), project.clone()]);
+        assert!(std::fs::metadata(&decompiled).unwrap().permissions().readonly());
+        assert!(!std::fs::metadata(&project).unwrap().permissions().readonly());
+        let mut writable = std::fs::metadata(&decompiled).unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        writable.set_readonly(false);
+        std::fs::set_permissions(&decompiled, writable).unwrap();
+        std::fs::remove_dir_all(&generated).unwrap();
     }
 
     #[test]
