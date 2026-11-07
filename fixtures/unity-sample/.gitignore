@@ -1,0 +1,9 @@
+# Unity's generated and per-user folders
+/Library/
+/Temp/
+/Logs/
+/UserSettings/
+/obj/
+/Build/
+*.csproj.user
+.vs/

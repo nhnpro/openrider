@@ -14,6 +14,7 @@ something to show.
 | `kotlin-gradle/` | JDK 21, Gradle 8 (no wrapper)                                   | `gradle run`                        | `gradle test`        | `gradle test -PopenideaFail`              | unused variable in `App.kt`                              |
 | `java-app/`      | JDK 21, Maven 3.9                                               | `mvn compile exec:java`             | `mvn test`           | `mvn test -DopenideaFail=true`            | unused variable in `App.java`                            |
 | `csharp-app/`    | .NET SDK 8+                                                     | `dotnet run --project src/Tasks.Cli` | `dotnet test`        | `OPENIDEA_FAIL=1 dotnet test`             | unused variable in `src/Tasks.Core/TaskStore.cs`         |
+| `unity-sample/` | Unity 6000.6 (made with 6000.6.8f1), .NET SDK 8+ for `dotnet build` | Play `Assets/Scenes/Main.unity` | Unity Test Runner (EditMode) | `OPENIDEA_FAIL=1` before starting Unity | unused variable in `Assets/Scripts/Player.cs`; CS0649 on `[SerializeField]` fields without Unity's analyzers |
 | `polyglot/`      | Go, TS, Python, C, shell, SQL, TOML/YAML/JSON, proto, Terraform | `make`                              | `make test`          | —                                     | unused variable in `native/hash.c`                       |
 
 The fixtures are standalone: `rust-app` declares its own `[workspace]` and
@@ -25,6 +26,29 @@ language servers, `smoke/run.test.ts` runs each project's run and test configura
 (the intentionally failing test included, then Rerun Failed Tests), and `smoke/debug.test.ts`
 debugs its entry point from the "Set a breakpoint here" line: when you change a fixture, run
 them for that language.
+
+## Unity sample
+
+`unity-sample/` is a minimal Unity project for the Unity features: two assembly
+definitions (`Game.Runtime`, `Game.Tests.EditMode`), `Player.prefab`, a variant that
+overrides `speed`, `Squad.prefab` nesting two players (one overriding `coins`),
+`Main.unity` with a UnityEvent bound to `Player.OnTriggerZoneEntered`, and
+`Walk.anim` calling `Player.OnFootstep` from an animation event. Assets are text
+serialized.
+
+The prefabs, scene, animation and the SDK-style `.csproj`/`.slnx` files are made by
+`Assets/Editor/FixtureBuilder.cs`; regenerate them with:
+
+```sh
+/Applications/Unity/Hub/Editor/<version>/Unity.app/Contents/MacOS/Unity -batchmode -nographics \
+  -projectPath fixtures/unity-sample -executeMethod FixtureBuilder.Build -quit
+```
+
+The project files reference the Unity install they were generated with
+(`/Applications/Unity/Hub/Editor/6000.6.8f1`); regenerate them for another one. Run the
+tests without the editor UI with `-runTests -testPlatform EditMode -testResults <file>`.
+Don't commit `Library/`, `Temp/`, `Logs/` or `UserSettings/` (the fixture's `.gitignore`
+excludes them).
 
 ## Setup
 
