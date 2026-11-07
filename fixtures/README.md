@@ -13,6 +13,7 @@ something to show.
 | `go-app/`        | Go 1.22+                                                        | `go run ./cmd/server`               | `go test ./...`      | `OPENIDEA_FAIL=1 go test ./...`           | unused `fmt.Sprintf` result in `internal/store/store.go` |
 | `kotlin-gradle/` | JDK 21, Gradle 8 (no wrapper)                                   | `gradle run`                        | `gradle test`        | `gradle test -PopenideaFail`              | unused variable in `App.kt`                              |
 | `java-app/`      | JDK 21, Maven 3.9                                               | `mvn compile exec:java`             | `mvn test`           | `mvn test -DopenideaFail=true`            | unused variable in `App.java`                            |
+| `csharp-app/`    | .NET SDK 8+                                                     | `dotnet run --project src/Tasks.Cli` | `dotnet test`        | `OPENIDEA_FAIL=1 dotnet test`             | unused variable in `src/Tasks.Core/TaskStore.cs`         |
 | `polyglot/`      | Go, TS, Python, C, shell, SQL, TOML/YAML/JSON, proto, Terraform | `make`                              | `make test`          | —                                     | unused variable in `native/hash.c`                       |
 
 The fixtures are standalone: `rust-app` declares its own `[workspace]` and

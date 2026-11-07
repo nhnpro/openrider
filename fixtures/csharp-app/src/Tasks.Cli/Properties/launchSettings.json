@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Tasks.Cli": {
+      "commandName": "Project",
+      "commandLineArgs": "list"
+    },
+    "Tasks.Cli (search)": {
+      "commandName": "Project",
+      "commandLineArgs": "search milk"
+    }
+  }
+}
