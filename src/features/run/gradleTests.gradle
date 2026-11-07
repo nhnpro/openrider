@@ -1,4 +1,4 @@
-// OpenRider: reports each test of Gradle's Test tasks as a TeamCity service message on the
+// Prefabric: reports each test of Gradle's Test tasks as a TeamCity service message on the
 // build's output, for the Run window's test tree: Gradle itself prints only failures (or a
 // project's own format), and writes its XML reports when a task ends. Test tasks always run,
 // so a rerun never ends UP-TO-DATE without results.

@@ -27,7 +27,7 @@ const superItem: Omit<HierarchyItem, "name" | "path"> = {
   selectionRange: { start: { line: 0, col: 0 }, end: { line: 0, col: 1 } },
   fromRanges: [],
 };
-const SCRATCH = "/Users/me/Library/Application Support/com.open.rider/scratches";
+const SCRATCH = "/Users/me/Library/Application Support/dev.prefabric.ide/scratches";
 
 const cfg = (over: Partial<RunConfig> & { id: string; kind: string }): RunConfig => ({
   name: over.id,

@@ -732,7 +732,7 @@ function MarketDetails({ entry, onInstalled }: { entry: MarketPlugin; onInstalle
         {!entry.compatible && (
           <p className={clsx(styles.notice, styles.detailsNotice)} role="note">
             <Icon name="info" size={14} />
-            <span>{tx`Needs plugin API ${entry.engine}. Update OpenRider to install it.`}</span>
+            <span>{tx`Needs plugin API ${entry.engine}. Update Prefabric to install it.`}</span>
           </p>
         )}
         {entry.description && <p className={styles.description}>{entry.description}</p>}

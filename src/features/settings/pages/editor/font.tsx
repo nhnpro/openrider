@@ -132,7 +132,7 @@ function WeightRows() {
   );
 }
 
-const SAMPLE = `OpenRider is a full-featured IDE
+const SAMPLE = `Prefabric is a full-featured IDE
 with a high level of usability and outstanding
 advanced code editing and refactoring support.
 

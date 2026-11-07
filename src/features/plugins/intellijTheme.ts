@@ -1,7 +1,7 @@
 /**
  * Converts an IntelliJ theme (`.theme.json`, optionally with its editor scheme
- * `.icls`) into an OpenRider theme + editor scheme, and an IntelliJ theme
- * plugin into an OpenRider theme plugin package. The mapping covers the main
+ * `.icls`) into an Prefabric theme + editor scheme, and an IntelliJ theme
+ * plugin into an Prefabric theme plugin package. The mapping covers the main
  * keys only; anything unmapped keeps the built-in value of the base (`kind`).
  *
  * Pure functions without imports: Settings › Plugins › Import IntelliJ Theme
@@ -9,7 +9,7 @@
  * and so does the command line (`scripts/theme/import-intellij-theme.ts`).
  */
 
-/** OpenRider token ← IntelliJ `ui` keys, first present wins. `*.prop` wildcards apply too. */
+/** Prefabric token ← IntelliJ `ui` keys, first present wins. `*.prop` wildcards apply too. */
 export const UI_KEYS: Record<string, string[]> = {
   "--bg-app": ["Panel.background"],
   "--bg-frame": ["MainWindow.background", "MainToolbar.background", "Panel.background"],
@@ -302,7 +302,7 @@ export function slug(name: string): string {
   );
 }
 
-/** Converts an IntelliJ `.theme.json` (comments removed) and optionally its `.icls` into OpenRider theme files. */
+/** Converts an IntelliJ `.theme.json` (comments removed) and optionally its `.icls` into Prefabric theme files. */
 export function convertIntellijTheme(themeJson: string, icls?: string, id?: string): ConvertedTheme {
   const parsed = JSON.parse(themeJson) as Json;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Not an IntelliJ theme");
@@ -331,7 +331,7 @@ export function convertIntellijTheme(themeJson: string, icls?: string, id?: stri
   }
   const scheme = icls ? convertIcls(icls) : null;
   const dark = typeof src.dark === "boolean" ? src.dark : (scheme?.dark ?? true);
-  // The editor surface sits on an island in OpenRider: keep it on the editor background.
+  // The editor surface sits on an island in Prefabric: keep it on the editor background.
   if (scheme?.tokens["--bg-editor"] && !tokens["--bg-island"]) tokens["--bg-island"] = scheme.tokens["--bg-editor"];
   return {
     theme: { id: id ?? slug(name), name, kind: dark ? "dark" : "light", tokens },
@@ -402,7 +402,7 @@ function semver(version: string | null): string {
   return m ? `${Number(m[1])}.${Number(m[2] ?? 0)}.${Number(m[3] ?? 0)}` : "1.0.0";
 }
 
-/** An OpenRider theme plugin (`intellij.<plugin>`) with every theme of an IntelliJ theme plugin. */
+/** An Prefabric theme plugin (`intellij.<plugin>`) with every theme of an IntelliJ theme plugin. */
 export function intellijThemePackage(source: IntellijThemeSource): ThemePackage {
   const ids = new Set<string>();
   const themes = source.themes.map((t) => {

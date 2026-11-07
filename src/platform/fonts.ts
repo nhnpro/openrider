@@ -96,7 +96,7 @@ export function familyFaces(family: string): readonly string[] {
   let entry = userFonts.get(key);
   if (!entry) {
     if (fontAvailable(name)) return [quoteFontFamily(name)];
-    const alias = `OpenRider User Font ${userFonts.size}`;
+    const alias = `Prefabric User Font ${userFonts.size}`;
     const loaded = loadUserFont(name, alias).catch(() => {
       /* retain local-name and bundled fallbacks */
     });

@@ -2,7 +2,7 @@
  * Icon set: JetBrains new-UI ("expui") icons from intellij-community / intellij-plugins
  * (Apache-2.0 / MIT, see THIRD_PARTY_LICENSES.md), vendored as-is under
  * `./expui/<group>/<name>.svg` with their `_dark` and `@20x20` variants. File types
- * whose JetBrains icons are not open source use OpenRider's own icons drawn in the same
+ * whose JetBrains icons are not open source use OpenIDEA's own icons drawn in the same
  * style, under `./openidea/<group>/<name>.svg` (paths prefixed `openidea/`). Names are the
  * contract used by actions (`Action.icon`) and contributions (`ToolWindowContribution.icon`).
  *

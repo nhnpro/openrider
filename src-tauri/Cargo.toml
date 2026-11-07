@@ -1,6 +1,6 @@
 [package]
 name = "openidea"
-description = "OpenRider desktop shell: an open-source IDE for Unity and C#, built on OpenIDEA"
+description = "Prefabric desktop shell: an open-source IDE for Unity and C#, built on OpenIDEA"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { ipcPath } from "./paths";
 
 const raw = String.raw;
-const APPDATA = raw`C:\Users\me\AppData\Roaming\com.open.rider`;
+const APPDATA = raw`C:\Users\me\AppData\Roaming\dev.prefabric.ide`;
 
 describe("ipcPath", () => {
   it("slashes Windows drive paths, plain or verbatim", () => {
-    expect(ipcPath(APPDATA)).toBe("C:/Users/me/AppData/Roaming/com.open.rider");
+    expect(ipcPath(APPDATA)).toBe("C:/Users/me/AppData/Roaming/dev.prefabric.ide");
     expect(ipcPath(raw`\\?\C:\Users\me`)).toBe("C:/Users/me");
   });
 

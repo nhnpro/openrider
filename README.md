@@ -1,7 +1,7 @@
-# OpenRider
+# Prefabric
 
 An open-source desktop IDE for **Unity and C#**, with a Rust core and a native
-(Tauri) shell. OpenRider is a fork of [OpenIDEA](https://github.com/l0ng-ai/openidea)
+(Tauri) shell. Prefabric is a fork of [OpenIDEA](https://github.com/l0ng-ai/openidea)
 and keeps its editor, code insight, debugger, Git, terminal and plugin system,
 then focuses on game development with Unity and .NET.
 
@@ -26,7 +26,7 @@ then focuses on game development with Unity and .NET.
 The plan is in [`docs/proposals/rust-csharp-unity.md`](docs/proposals/rust-csharp-unity.md).
 The main items:
 
-1. **Unity external script editor**: a `com.open.rider` Unity package, so OpenRider can be
+1. **Unity external script editor**: a `dev.prefabric.unity` Unity package, so Prefabric can be
    picked in _Preferences › External Tools_ and generates the `.sln`/`.csproj` files.
 2. **Asset-aware navigation**: index scenes, prefabs and assets, then find the GameObjects and
    prefabs that use a script, method or serialized field.
@@ -57,7 +57,7 @@ incremental. Contributor notes are in [`CLAUDE.md`](CLAUDE.md) and
 
 ## License
 
-[Apache 2.0](LICENSE). OpenRider is based on OpenIDEA; see [`NOTICE`](NOTICE) for
+[Apache 2.0](LICENSE). Prefabric is based on OpenIDEA; see [`NOTICE`](NOTICE) for
 attribution and [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) for bundled assets.
 
 <sub>Not affiliated with, endorsed by or sponsored by JetBrains s.r.o. Rider, IntelliJ and

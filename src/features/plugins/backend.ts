@@ -297,7 +297,7 @@ function sampleUi(id: string): UiContribution[] {
 
 function samplePlugins(): PluginInfo[] {
   const base = {
-    authors: ["OpenRider contributors"],
+    authors: ["Prefabric contributors"],
     homepage: null,
     changeNotes: null,
     source: "installed" as const,
@@ -328,7 +328,7 @@ function samplePlugins(): PluginInfo[] {
       name: "Hello",
       version: "0.1.0",
       description: "Sample plugin: inserts today's date and counts words in the active file.",
-      path: "~/Library/Application Support/com.open.rider/plugins/hello",
+      path: "~/Library/Application Support/dev.prefabric.ide/plugins/hello",
       status: "inactive",
       hasCode: true,
       activation: ["on-startup-finished"],
@@ -345,7 +345,7 @@ function samplePlugins(): PluginInfo[] {
       name: "Harbor Night Theme",
       version: "1.0.0",
       description: "Example dark theme: slate surfaces, a teal accent and a warm syntax palette.",
-      path: "~/Library/Application Support/com.open.rider/plugins/theme-harbor-night",
+      path: "~/Library/Application Support/dev.prefabric.ide/plugins/theme-harbor-night",
       status: "static",
       hasCode: false,
       contributions: SAMPLE_THEMES.map((t) => ({ point: "themes", label: t.name })),
@@ -356,7 +356,7 @@ function samplePlugins(): PluginInfo[] {
       name: "Toy Language",
       version: "0.1.0",
       description: "Language support for .toy files: detection, comments and indentation.",
-      path: "~/Library/Application Support/com.open.rider/plugins/language-toy",
+      path: "~/Library/Application Support/dev.prefabric.ide/plugins/language-toy",
       status: "static",
       hasCode: false,
       contributions: [{ point: "languages", label: "Toy (.toy)" }],

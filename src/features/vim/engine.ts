@@ -1,6 +1,6 @@
 /**
  * The Vim emulation itself (@replit/codemirror-vim), loaded only once Vim mode
- * is turned on: the per-editor extension, OpenRider's Ex commands (`:w`, `:q`,
+ * is turned on: the per-editor extension, Prefabric's Ex commands (`:w`, `:q`,
  * `:action`) and applying the rc file.
  */
 import { EditorState, Prec, StateEffect, StateField, Transaction, type Extension } from "@codemirror/state";
@@ -261,7 +261,7 @@ function later(run: () => void) {
   setTimeout(run, 0);
 }
 
-/** `:action <id>`: an IdeaVim action id or an OpenRider one. Returns the action run, or null. */
+/** `:action <id>`: an IdeaVim action id or an Prefabric one. Returns the action run, or null. */
 export function runIdeAction(id: string | undefined): string | null {
   if (!id) {
     showStatusInfo("Usage: :action <action id>");
@@ -278,7 +278,7 @@ export function runIdeAction(id: string | undefined): string | null {
 
 let exDefined = false;
 
-/** OpenRider's Ex commands: `:w`, `:wa`, `:q`, `:qa`, `:wq`, `:x`, `:action`. */
+/** Prefabric's Ex commands: `:w`, `:wa`, `:q`, `:qa`, `:wq`, `:x`, `:action`. */
 export function defineExCommands() {
   if (exDefined) return;
   exDefined = true;

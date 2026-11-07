@@ -62,7 +62,7 @@ function Landing() {
   return (
     <div className={styles.landing}>
       <div className={styles.landingTitle}>
-        <T>Welcome to OpenRider</T>
+        <T>Welcome to Prefabric</T>
       </div>
       <p className={styles.landingText}>
         {canClone

@@ -78,7 +78,7 @@ describe("Vim engine", () => {
     Vim.mapclear();
   });
 
-  it(":action runs OpenRider actions by IdeaVim or OpenRider id", async () => {
+  it(":action runs Prefabric actions by IdeaVim or Prefabric id", async () => {
     const view = makeView();
     _handleEx(view, "action GotoDeclaration");
     _handleEx(view, "action code.reformat");

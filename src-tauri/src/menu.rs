@@ -100,7 +100,7 @@ impl Native {
             Native::Paste => "Paste",
             Native::SelectAll => "Select All",
             Native::Services => "Services",
-            Native::Hide => "Hide OpenRider",
+            Native::Hide => "Hide Prefabric",
             Native::HideOthers => "Hide Others",
             Native::ShowAll => "Show All",
             Native::Minimize => "Minimize",
@@ -186,9 +186,9 @@ pub fn spec(os: Os) -> Vec<Entry> {
     if mac {
         menus.push(sub(
             "app",
-            "OpenRider",
+            "Prefabric",
             vec![
-                act("app.about", "About OpenRider"),
+                act("app.about", "About Prefabric"),
                 act("app.checkForUpdates", "Check for Updates…"),
                 SEP,
                 act("file.settings", "Settings…"),
@@ -199,7 +199,7 @@ pub fn spec(os: Os) -> Vec<Entry> {
                 Entry::Native(Native::HideOthers),
                 Entry::Native(Native::ShowAll),
                 SEP,
-                accel("app.quit", "Quit OpenRider", "CmdOrCtrl+Q"),
+                accel("app.quit", "Quit Prefabric", "CmdOrCtrl+Q"),
             ],
         ));
     }
@@ -829,7 +829,7 @@ pub fn spec(os: Os) -> Vec<Entry> {
         act("help.showLog", show_log),
     ];
     if !mac {
-        help.extend([act("app.checkForUpdates", "Check for Updates…"), SEP, act("app.about", "About OpenRider")]);
+        help.extend([act("app.checkForUpdates", "Check for Updates…"), SEP, act("app.about", "About Prefabric")]);
     }
     menus.push(sub("help", "Help", help));
     menus

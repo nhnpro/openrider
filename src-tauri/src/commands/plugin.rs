@@ -573,7 +573,7 @@ pub fn plugin_set_secret(
     state.plugins.set_secret(&plugin_id, &name, value.as_deref())
 }
 
-/// Plugin secrets in the login keychain (service `com.open.rider.plugin.<id>`).
+/// Plugin secrets in the login keychain (service `dev.prefabric.ide.plugin.<id>`).
 #[cfg(target_os = "macos")]
 struct KeychainSecrets;
 
@@ -601,7 +601,7 @@ impl ide_host::plugins::SecretStore for KeychainSecrets {
 #[cfg(target_os = "macos")]
 impl KeychainSecrets {
     fn service(plugin: &str) -> String {
-        format!("com.open.rider.plugin.{plugin}")
+        format!("dev.prefabric.ide.plugin.{plugin}")
     }
 }
 

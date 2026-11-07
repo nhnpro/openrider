@@ -108,7 +108,7 @@ describe("macOS user font resolver", () => {
   it("loads an unavailable family once across primary, fallback and UI, including regular/bold/italic", async () => {
     const { fonts, invoke, registered, load } = await resolver(false);
     const family = fonts.monoFontFamily("JetBrainsMono Nerd Font Mono");
-    expect(family).toContain('"OpenRider User Font 0", "JetBrainsMono Nerd Font Mono"');
+    expect(family).toContain('"Prefabric User Font 0", "JetBrainsMono Nerd Font Mono"');
     fonts.uiFontFamily("jetbrainsmono nerd font mono");
     fonts.monoFontFamily("Inter", "JetBrainsMono Nerd Font Mono");
     await fonts.fontsLoaded(family, 14);
@@ -132,9 +132,9 @@ describe("macOS user font resolver", () => {
     const { fonts, invoke, registered } = await resolver(false);
     const family = fonts.uiFontFamily("Inter", "Maple Mono NF CN");
     expect(family).toBe(
-      '"Inter Variable", "Inter", "OpenRider User Font 0", "Maple Mono NF CN", system-ui, sans-serif',
+      '"Inter Variable", "Inter", "Prefabric User Font 0", "Maple Mono NF CN", system-ui, sans-serif',
     );
-    expect(fonts.monoFontFamily("Inter", "Maple Mono NF CN")).toContain('"OpenRider User Font 0"');
+    expect(fonts.monoFontFamily("Inter", "Maple Mono NF CN")).toContain('"Prefabric User Font 0"');
     await fonts.fontsLoaded(family, 13);
     expect(invoke).toHaveBeenCalledExactlyOnceWith("user_font_data", { family: "Maple Mono NF CN" });
     expect(registered).toHaveLength(3);

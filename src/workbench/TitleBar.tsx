@@ -62,7 +62,7 @@ function ProjectButton() {
     list.push({ kind: "separator" }, { kind: "action", action: "file.closeProject" });
     return list;
   }, [actions]);
-  const label = name ?? "OpenRider";
+  const label = name ?? "Prefabric";
   return (
     <>
       <BarButton
