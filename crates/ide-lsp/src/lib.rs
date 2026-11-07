@@ -20,6 +20,7 @@ mod launch;
 mod library_source;
 mod loading;
 mod pull;
+mod roslyn;
 mod scope;
 mod server;
 mod tcp;
@@ -647,6 +648,9 @@ impl LspManager {
         }
 
         self.refresh_external_project(&server, &run).await;
+        if server.name == roslyn::SERVER {
+            self.open_roslyn_projects(&server, &run).await;
+        }
 
         // Publish readiness and (re)open attached documents atomically w.r.t. did_change.
         let mut reopened = Vec::new();

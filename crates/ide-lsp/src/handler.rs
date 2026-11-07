@@ -277,6 +277,9 @@ impl Handler for ClientHandler {
             "angular/projectLoadingFinish" => {
                 self.progress(&mgr, json!({ "token": ANGULAR_LOADING, "value": { "kind": "end" } }))
             }
+            crate::roslyn::PROJECTS_LOADED if self.server.name == crate::roslyn::SERVER => {
+                self.server.set_loading(mgr.sink(), false);
+            }
             "telemetry/event" | "$/logTrace" | "$/cancelRequest" => {}
             other => tracing::trace!("[{}] unhandled notification {other}", self.server.name),
         }
@@ -288,6 +291,10 @@ impl Handler for ClientHandler {
         };
         match method {
             "window/workDoneProgress/create" => Ok(Value::Null),
+            crate::roslyn::NEEDS_RESTORE if self.server.name == crate::roslyn::SERVER => {
+                mgr.restore_roslyn_projects(self.server.clone(), self.generation, params);
+                Ok(Value::Null)
+            }
             "window/showMessageRequest" => {
                 self.show_message(&mgr, &params);
                 Ok(Value::Null)
